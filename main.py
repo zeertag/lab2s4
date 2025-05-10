@@ -86,8 +86,8 @@ def jpeg_encoding(quality, path):
     t = Cr
 
     Y = encode_blocks(Y)
-    Cr = encode_blocks(Cr)
-    Cb = encode_blocks(Cb)
+    Cr = encode_blocks(Cr, 1)
+    Cb = encode_blocks(Cb, 1)
     # # 10 - 11) Переменное кодирование разностей DC и AC коэф + RLE кодирование AC коэффициентов
     # Y = [Y[0]] + encode_blocks(Y[1::])
     # Cr = [Cr[0]] + encode_blocks(Cr[1::])
@@ -148,10 +148,10 @@ def jpeg_decode(quality, path="Results/out"):
     # Хаффман
     Y = decode_blocks(Y)
     Cr = decode_blocks(Cr, 1)
-    for i in range(len(Cr)):
-        if Cr[i] != t[i]:
-            print(i, Cr[i], t[i])
-    Cb = decode_blocks(Cb)
+    # for i in range(len(Cr)):
+    #     if Cr[i] != t[i]:
+    #         print(i, Cr[i], t[i])
+    Cb = decode_blocks(Cb, 1)
     # Y = Huffman_JPEG_decode(Y)
     # Cr = Huffman_JPEG_decode(Cr)
     # Cb = Huffman_JPEG_decode(Cb)
