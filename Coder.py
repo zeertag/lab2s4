@@ -1,115 +1,6 @@
-import math
+import numpy as np
 
-
-# ----------------------------
-# Категория и переменное кодирование значений
-# ----------------------------
-
-def get_category(value):
-    if value == 0:
-        return 0
-    return int(math.floor(math.log2(abs(value)))) + 1
-
-
-def encode_value(value, category):
-    if category == 0:
-        return 0
-    if value >= 0:
-        return value
-    else:
-        return (1 << category) + value - 1  # инвертированные биты
-
-
-def decode_value(bits, category):
-    if category == 0:
-        return 0
-    if bits >= (1 << (category - 1)):
-        return bits
-    else:
-        return bits - (1 << category) + 1
-
-
-# ----------------------------
-# BitStream writer/reader
-# ----------------------------
-
-class BitStream:
-    def __init__(self):
-        self.bits = []
-        self.byte_array = bytearray()
-
-    def write_bits(self, value, length):
-        for i in reversed(range(length)):
-            self.bits.append((value >> i) & 1)
-        self._flush()
-
-    def _flush(self):
-        while len(self.bits) >= 8:
-            byte = 0
-            for _ in range(8):
-                byte = (byte << 1) | self.bits.pop(0)
-            self.byte_array.append(byte)
-
-    def flush_final(self):
-        if self.bits:
-            byte = 0
-            for _ in range(8):
-                if self.bits:
-                    byte = (byte << 1) | self.bits.pop(0)
-                else:
-                    byte <<= 1
-            self.byte_array.append(byte)
-
-    def get_bytes(self):
-        return bytes(self.byte_array)
-
-
-class BitReader:
-    def __init__(self, data):
-        self.data = data
-        self.bitpos = 0
-
-    def read_bit(self):
-        byte_index = self.bitpos // 8
-        bit_index = 7 - (self.bitpos % 8)
-        self.bitpos += 1
-        return (self.data[byte_index] >> bit_index) & 1
-
-    def read_bits(self, count):
-        result = 0
-        for _ in range(count):
-            result = (result << 1) | self.read_bit()
-        return result
-
-
-# ----------------------------
-# RLE кодирование AC
-# ----------------------------
-
-def rle_ac(ac_coeffs):
-    result = []
-    zero_run = 0
-    for val in ac_coeffs:
-        if val == 0:
-            zero_run += 1
-            if zero_run == 16:
-                result.append((15, 0, 0))  # ZRL
-                zero_run = 0
-        else:
-            cat = get_category(val)
-            bits = encode_value(val, cat)
-            result.append((zero_run, cat, bits))
-            zero_run = 0
-    if zero_run > 0:
-        result.append((0, 0, 0))  # EOB
-    return result
-
-
-# ----------------------------
-# Хаффман-таблицы
-# ----------------------------
-
-huffman_dc = {
+huffman_dc_luminance = {
     0: (0b00, 2),
     1: (0b010, 3),
     2: (0b011, 3),
@@ -124,7 +15,7 @@ huffman_dc = {
     11: (0b111111110, 9)
 }
 
-huffman_ac = {
+huffman_ac_luminance = {
     (0, 0): (0b1010, 4),
     (0, 1): (0b00, 2),
     (0, 2): (0b01, 2),
@@ -236,7 +127,57 @@ huffman_ac = {
     (10, 8): (0b1111111111001101, 16),
     (10, 9): (0b1111111111001110, 16),
     (10, 10): (0b1111111111001111, 16),
-    (15, 0): (0b11111111001, 11),  # ZRL
+    (11, 1): (0b1111111001, 10),
+    (11, 2): (0b1111111111010000, 16),
+    (11, 3): (0b1111111111010001, 16),
+    (11, 4): (0b1111111111010010, 16),
+    (11, 5): (0b1111111111010011, 16),
+    (11, 6): (0b1111111111010100, 16),
+    (11, 7): (0b1111111111010101, 16),
+    (11, 8): (0b1111111111010110, 16),
+    (11, 9): (0b1111111111010111, 16),
+    (11, 10): (0b1111111111011000, 16),
+    (12, 1): (0b1111111010, 10),
+    (12, 2): (0b1111111111011001, 16),
+    (12, 3): (0b1111111111011010, 16),
+    (12, 4): (0b1111111111011011, 16),
+    (12, 5): (0b1111111111011100, 16),
+    (12, 6): (0b1111111111011101, 16),
+    (12, 7): (0b1111111111011110, 16),
+    (12, 8): (0b1111111111011111, 16),
+    (12, 9): (0b1111111111100000, 16),
+    (12, 10): (0b1111111111100001, 16),
+    (13, 1): (0b11111111000, 11),
+    (13, 2): (0b1111111111100010, 16),
+    (13, 3): (0b1111111111100011, 16),
+    (13, 4): (0b1111111111100100, 16),
+    (13, 5): (0b1111111111100101, 16),
+    (13, 6): (0b1111111111100110, 16),
+    (13, 7): (0b1111111111100111, 16),
+    (13, 8): (0b1111111111101000, 16),
+    (13, 9): (0b1111111111101001, 16),
+    (13, 10): (0b1111111111101010, 16),
+    (14, 1): (0b111111111101011, 15),
+    (14, 2): (0b1111111111101100, 16),
+    (14, 3): (0b1111111111101101, 16),
+    (14, 4): (0b11111111101110, 14),
+    (14, 5): (0b1111111111101111, 16),
+    (14, 6): (0b1111111111110000, 16),
+    (14, 7): (0b1111111111110001, 16),
+    (14, 8): (0b1111111111110010, 16),
+    (14, 9): (0b1111111111110011, 16),
+    (14, 10): (0b1111111111110100, 16),
+    (15, 0): (0b11111111001, 11),
+    (15, 1): (0b1111111111110101, 16),
+    (15, 2): (0b1111111111110110, 16),
+    (15, 3): (0b1111111111110111, 16),
+    (15, 4): (0b1111111111111000, 16),
+    (15, 5): (0b1111111111111001, 16),
+    (15, 6): (0b1111111111111010, 16),
+    (15, 7): (0b1111111111111011, 16),
+    (15, 8): (0b1111111111111100, 16),
+    (15, 9): (0b1111111111111101, 16),
+    (15, 10): (0b1111111111111110, 16)
 }
 
 huffman_dc_chrominance = {
@@ -419,129 +360,177 @@ huffman_ac_chrominance = {
     (15, 10): (0b1111111110, 10),
 }
 
-# Обратные таблицы Хаффмана для декодирования
-inv_huffman_dc = {format(code, f'0{length}b'): size for size, (code, length) in huffman_dc.items()}
-inv_huffman_ac = {format(code, f'0{length}b'): (run, size) for (run, size), (code, length) in huffman_ac.items()}
 
-# Обратные таблицы Хаффмана для декодирования хроминансных коэффициентов
-inv_huffman_dc_chrominance = {format(code, f'0{length}b'): size for size, (code, length) in
-                              huffman_dc_chrominance.items()}
-inv_huffman_ac_chrominance = {format(code, f'0{length}b'): (run, size) for (run, size), (code, length) in
-                              huffman_ac_chrominance.items()}
+def diff(data):
+    for i in range(len(data) - 1, 0, -1):
+        data[i][0] = data[i][0] - data[i - 1][0]
+    return data
 
 
-# ----------------------------
-# Кодирование JPEG блоков
-# ----------------------------
+def back_diff(data):
+    for i in range(1, len(data)):
+        data[i][0] = data[i][0] + data[i - 1][0]
+    return data
 
-def encode_blocks(blocks, chrominance=False):
-    bitstream = BitStream()
-    height, width = blocks[0]
-    blocks = blocks[1:]
-    num_blocks = len(blocks)
 
-    # Write image info (height, width, num_blocks) — 2 bytes each
-    header = height.to_bytes(2, 'big') + width.to_bytes(2, 'big') + num_blocks.to_bytes(2, 'big')
+def category(val):
+    return 0 if val == 0 else int(np.floor(np.log2(abs(val)))) + 1
 
-    prev_dc = 0
-    for block in blocks:
-        dc = block[0]
-        dc_diff = dc - prev_dc
-        prev_dc = dc
 
-        cat = get_category(dc_diff)
+def encode_value(val, category):
+    if category == 0:
+        return ''
+    if val >= 0:
+        return format(val, f'0{category}b')
+    else:
+        # Инверсия значения по JPEG: 2^n - 1 + val
+        max_val = (1 << category) - 1
+        encoded = max_val + val  # т.к. val < 0
+        return format(encoded, f'0{category}b')
 
-        # Выбор таблицы Хаффмана для luminance или chrominance
-        if chrominance:
-            huffman_dc_table = huffman_dc_chrominance
+
+def decode_value(bits: str, category: int):
+    if category == 0:
+        return 0
+    if bits[0] == '1':
+        # положительное число
+        return int(bits, 2)
+    else:
+        # отрицательное число по JPEG-правилам
+        return int(bits, 2) - (1 << category) + 1
+
+
+def run_lenght(data, ha):
+    rl = []
+    zero_counter = 0
+    for i in data:
+        if i != 0 or zero_counter == 15:
+            cat = category(i)
+            ha_code, ha_len = ha[zero_counter, cat]
+            ac_help = encode_value(i, cat)
+            rl.append(format(ha_code, f'0{ha_len}b') + ac_help)
+            zero_counter = 0
         else:
-            huffman_dc_table = huffman_dc
-
-        dc_code, dc_len = huffman_dc_table[cat]
-        dc_bits = encode_value(dc_diff, cat)
-
-        bitstream.write_bits(dc_code, dc_len)
-        bitstream.write_bits(dc_bits, cat)
-
-        ac_encoded = rle_ac(block[1:])
-        for run, size, val_bits in ac_encoded:
-            # Выбор таблицы Хаффмана для luminance или chrominance
-            if chrominance:
-                huffman_ac_table = huffman_ac_chrominance
-            else:
-                huffman_ac_table = huffman_ac
-
-            ac_code, ac_len = huffman_ac_table.get((run, size), (0, 0))
-            bitstream.write_bits(ac_code, ac_len)
-            if size > 0:
-                bitstream.write_bits(val_bits, size)
-
-    bitstream.flush_final()
-    return header + bitstream.get_bytes()
+            zero_counter += 1
+    eob_code, eob_len = ha[(0, 0)]
+    rl.append(format(eob_code, f'0{eob_len}b'))
+    return rl
 
 
-# ----------------------------
-# Декодирование JPEG блоков
-# ----------------------------
+def bits_to_bytes_with_padding(bits, valid_bits=None):
+    bitstream = ''.join(bits)
+    if valid_bits:
+        bitstream = bitstream[:valid_bits]
+    padding = (8 - len(bitstream) % 8) % 8
+    bitstream_padded = bitstream + '0' * padding
+    byte_data = bytearray(int(bitstream_padded[i:i + 8], 2) for i in range(0, len(bitstream_padded), 8))
+    padding_byte = padding.to_bytes(1, 'big')
+    byte_data = padding_byte + byte_data
 
-def decode_blocks(encoded: bytes, chrominance=False):
-    # Read header
-    height = int.from_bytes(encoded[0:2], 'big')
-    width = int.from_bytes(encoded[2:4], 'big')
-    num_blocks = int.from_bytes(encoded[4:6], 'big')
-    data = encoded[6:]
+    return byte_data
 
-    reader = BitReader(data)
+
+def decode_bytes_with_padding(byte_data):
+    padding = byte_data[0]
+    byte_data = byte_data[1:]
+    bitstream = ''.join(f'{byte:08b}' for byte in byte_data)
+    bitstream = bitstream[:-padding] if padding else bitstream
+    return bitstream
+
+
+def encoding_blocks(data, chrominance=0):
+    height, width = data[0]
+    num_blocks = len(data) - 1
+    data = data[1::]
+    d = diff(data)
+
+    if chrominance == 0:
+        dc_ha = huffman_dc_luminance
+        ac_ha = huffman_ac_luminance
+    else:
+        dc_ha = huffman_dc_chrominance
+        ac_ha = huffman_ac_chrominance
+
+    bitstream = []
+
+    for block in d:
+        dc_category = category(block[0])
+        DC_code, DC_len = dc_ha[dc_category]
+        DC_help = encode_value(block[0], dc_category)
+        DC = format(DC_code, f'0{DC_len}b') + DC_help
+
+        block_rl = [DC] + run_lenght(block[1::], ac_ha)
+        bitstream.extend(block_rl)
+
+    bitstream = ''.join(bitstream)
+
+    # header = (
+    #         height.to_bytes(2, 'big') +
+    #         width.to_bytes(2, 'big') +
+    #         num_blocks.to_bytes(2, 'big')
+    # )
+    return str(height) + str(width) + str(num_blocks) + bitstream
+
+
+def decoding_blocks(data, chrominance=0):
+    height = int(data[0:3])
+    width = int(data[3:6])
+    num_blocks = int(data[6:10])
+
+    bitstream = data[10::]
+
+    if chrominance == 0:
+        dc_ha = huffman_dc_luminance
+        ac_ha = huffman_ac_luminance
+    else:
+        dc_ha = huffman_dc_chrominance
+        ac_ha = huffman_ac_chrominance
+
+    dc_ha_inv = {format(v[0], f'0{v[1]}b'): k for k, v in dc_ha.items()}
+    ac_ha_inv = {format(v[0], f'0{v[1]}b'): k for k, v in ac_ha.items()}
+
     blocks = []
-
-    prev_dc = 0
+    pos = 0
     for _ in range(num_blocks):
-        # Decode DC
-        if chrominance:
-            huffman_dc_table = inv_huffman_dc_chrominance
-        else:
-            huffman_dc_table = inv_huffman_dc
+        block = [0] * 64
 
-        dc_cat = read_huffman_code(reader, huffman_dc_table)
-        dc_bits = reader.read_bits(dc_cat)
-        dc_diff = decode_value(dc_bits, dc_cat)
-        dc = prev_dc + dc_diff
-        prev_dc = dc
+        # --- DC decoding ---
+        dc_key = ''
+        while dc_key not in dc_ha_inv:
+            if pos >= len(bitstream):
+                raise ValueError("Недостаточно данных при декодировании DC")
+            dc_key += bitstream[pos]
+            pos += 1
 
-        ac = []
-        total_ac = 0
-        while total_ac < 63:
-            if chrominance:
-                huffman_ac_table = inv_huffman_ac_chrominance
-            else:
-                huffman_ac_table = inv_huffman_ac
+        dc_category = dc_ha_inv[dc_key]
+        dc_val_bits = bitstream[pos:pos + dc_category]
+        pos += dc_category
+        block[0] = decode_value(dc_val_bits, dc_category)
 
-            run, size = read_huffman_code(reader, huffman_ac_table)
+        # --- AC decoding ---
+        i = 1
+        while i < 64:
+            ac_key = ''
+            while ac_key not in ac_ha_inv:
+                if pos >= len(bitstream):
+                    raise ValueError("Недостаточно данных при декодировании AC")
+                ac_key += bitstream[pos]
+                pos += 1
+
+            run, size = ac_ha_inv[ac_key]
             if (run, size) == (0, 0):  # EOB
-                while len(ac) < 63:
-                    ac.append(0)
                 break
-            elif (run, size) == (15, 0):  # ZRL
-                ac.extend([0] * 16)
-                total_ac += 16
-            else:
-                ac.extend([0] * run)
-                val_bits = reader.read_bits(size)
-                value = decode_value(val_bits, size)
-                ac.append(value)
-                total_ac = len(ac)
-        while len(ac) < 63:
-            ac.append(0)
-        blocks.append([dc] + ac)
+            i += run
+            if i >= 64:
+                break  # или можно выдать ошибку или предупреждение
+            val_bits = bitstream[pos:pos + size]
+            pos += size
+            block[i] = decode_value(val_bits, size)
+            i += 1
+
+        print(block)
+        blocks.append(block)
+
+    back_diff(blocks)
 
     return [(height, width)] + blocks
-
-
-def read_huffman_code(reader, inv_table, max_bits=16):
-    bits = ''
-    for _ in range(max_bits):
-        bit = str(reader.read_bit())
-        bits += bit
-        if bits in inv_table:
-            return inv_table[bits]
-    raise ValueError(f"Invalid Huffman code: {bits}")

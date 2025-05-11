@@ -12,9 +12,9 @@ def blocks(M, N):
         new_M = np.zeros((new_x, new_y), dtype=M.dtype)
         new_M[:x, :y] = M
         M = new_M
-        x, y = M.shape
 
-    blocked = [M.shape]
+    blocked = [(x, y)]
+    x, y = M.shape
     for i in range(0, x, N):
         for j in range(0, y, N):
             block = M[i:i + N, j:j + N]
@@ -25,9 +25,8 @@ def blocks(M, N):
 
 def unblock(blocked, original_shape):
     x, y = original_shape
-    N = blocked[0].shape[0]  # размер блока (обычно 8)
+    N = blocked[0].shape[0]
 
-    # Расчёт размера с паддингом (если он был)
     new_x = N * ((x + N - 1) // N)
     new_y = N * ((y + N - 1) // N)
 

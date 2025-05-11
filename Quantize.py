@@ -1,9 +1,9 @@
 import numpy as np
 
 
-def scale_quant_matrix(Q, quality):
-    if quality < 1:
-        quality = 1
+def quant_matrix(qmatrix, quality):
+    if quality <= 0:
+        quality = 0.01
     elif quality > 100:
         quality = 100
 
@@ -12,6 +12,6 @@ def scale_quant_matrix(Q, quality):
     else:
         scale = 200 - quality * 2
 
-    scaled_matrix = ((Q * scale + 50) / 100).astype(np.uint8)
+    scaled_matrix = ((qmatrix * scale + 50) / 100).astype(np.uint8)
     scaled_matrix[scaled_matrix == 0] = 1
     return scaled_matrix

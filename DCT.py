@@ -12,8 +12,10 @@ def create_dct_matrix(N):
 
 def DCT(data):
     transformed = []
-    dct_mat = create_dct_matrix(data[0].shape[0])
+    N = data[0].shape[0]
+    dct_mat = create_dct_matrix(N)
     for block in data:
+        block = block.astype(np.float32) - 128
         dct_block = dct_mat @ block @ dct_mat.T
         transformed.append(dct_block)
     return transformed
@@ -21,8 +23,10 @@ def DCT(data):
 
 def iDCT(data):
     transformed = []
-    dct_mat = create_dct_matrix(data[0].shape[0])
+    N = data[0].shape[0]
+    dct_mat = create_dct_matrix(N)
     for block in data:
         dct_block = dct_mat.T @ block @ dct_mat
+        dct_block = np.clip(np.round(dct_block + 128), 0, 255).astype(np.uint8)
         transformed.append(dct_block)
     return transformed

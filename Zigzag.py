@@ -1,4 +1,3 @@
-import numpy
 import numpy as np
 
 
@@ -12,9 +11,9 @@ def zigzag(M):
                 j = d - i
                 if i < N and j < N:
                     if d % 2 == 0:
-                        line.append(block[j, i])
+                        line.append(int(block[j, i]))
                     else:
-                        line.append(block[i, j])
+                        line.append(int(block[i, j]))
         transform.append(line)
     return transform
 
